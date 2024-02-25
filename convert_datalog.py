@@ -22,6 +22,9 @@ from datetime import date
 # parse fields in input file to create datalog object: a list of dictionaries
 f = open('input/log_G300MFD.csv', 'r')
 input_file_info = {key:value for (key, value) in [(field.split('=')[0], shlex.split(field.split('=')[1])[0]) for field in f.readline().split(',')[1:]]}
+
+
+# read line with column units and convert to G3X format
 input_units = []
 for name in [unit.strip() for unit in f.readline().split(',')] :
     if name == 'enum' or name == '+/-1.0' or name == 'ident':
@@ -35,6 +38,7 @@ for name in [unit.strip() for unit in f.readline().split(',')] :
     else:
         input_units.append(name)
 
+# read in the data column labels from the input file and replace some to match the G3X formatting.
 input_row_labels = []
 for label in [label.strip() for label in f.readline().split(',')]:
     if label.startswith('Local'):
@@ -62,25 +66,31 @@ for label in [label.strip() for label in f.readline().split(',')]:
     else:
         input_row_labels.append(label)
 
-print(input_file_info)
-print(input_row_labels)
-print(input_units)
-
+# create full labels
 input_labels_full = []
 for (label, unit) in zip(input_row_labels, input_units):
     if unit == '':
         input_labels_full.append(label)
-    elif label == 'Local Date':
-        input_labels_full.append('Date ()')
     else:
         input_labels_full.append(f"{label} ({unit})")
 
-print(input_labels_full)
+# TODO offset the date field based on the file name
+        
+# TODO create input label for GPS time of week and calculate for each row of data log
 
+# Read in the header of the example template
 f = open('example/log_G3X.csv')
 example_file_info = {key:value for (key, value) in [(field.split('=')[0], shlex.split(field.split('=')[1])[0]) for field in f.readline().split(',')[1:]]}
 example_file_labels = [label.strip() for label in f.readline().split(',')]
 example_file_name = f.readline().strip()
+
+
+print(input_file_info)
+print(input_row_labels)
+print(input_units)
+print(input_labels_full)
+
+
 
 print('example file\n=================\n')
 print(example_file_info)
@@ -97,7 +107,9 @@ input_matching = {}
 for label in input_labels_full:
     input_matching[label] = label in example_file_labels
 
-print(input_matching)
+for label in input_labels_full:
+    print(f"{label} : {input_matching[label]}")
+
 
 
 
