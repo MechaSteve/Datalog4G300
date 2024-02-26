@@ -74,9 +74,15 @@ for (label, unit) in zip(input_row_labels, input_units):
     else:
         input_labels_full.append(f"{label} ({unit})")
 
+# TODO : clean up jumps in date and time (combine with reading in data rows)
+# If the date jumps by more than 1 day or the time jumps by more than one hour, throw out all of the previous rows
+        
 # TODO offset the date field based on the file name
+# use datetime.fromordinal(date.toordinal() + date_offset)
+# 
         
 # TODO create input label for GPS time of week and calculate for each row of data log
+# date.isoweekday() % 7 will yield 0 for sunday and 6 for Saturday
 
 # Read in the header of the example template
 f = open('example/log_G3X.csv')
