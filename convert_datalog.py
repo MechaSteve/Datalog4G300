@@ -15,7 +15,7 @@
 # write the two row header lines from the example to the new file
 # use the dictionary writer to write out the datalog object
 
-import shlex, csv
+import csv
 from datetime import date
 from collections.abc import Iterable
 from os.path import isfile
