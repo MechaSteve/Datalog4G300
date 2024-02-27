@@ -17,106 +17,134 @@
 
 import shlex, csv
 from datetime import date
+from collections.abc import Iterable
+from os.path import isfile
+from os import listdir
 
 
-# parse fields in input file to create datalog object: a list of dictionaries
-f = open('input/log_G300MFD.csv', 'r')
-input_file_info = {key:value for (key, value) in [(field.split('=')[0], shlex.split(field.split('=')[1])[0]) for field in f.readline().split(',')[1:]]}
+def get_input_units(raw_data : str) -> list[str]:
+    # read line with column units and convert to G3X format
+    units = []
+    for name in [field.strip() for field in raw_data.split(',')] :
+        if name == 'enum' or name == '+/-1.0' or name == 'ident':
+            units.append('')
+        elif name == 'deg true':
+            units.append('deg')
+        elif name == 'kts':
+            units.append('kt')
+        elif name == 'fpm':
+            units.append('ft/min')
+        else:
+            units.append(name)
+    return units
+
+def get_input_lables(raw_data: str) -> list[str]:
+    # read in the data column labels from the input file and replace some to match the G3X formatting.
+    converted_labels = []
+    for label in [label.strip() for label in raw_data.split(',')]:
+        if label.startswith('Local'):
+            converted_labels.append(label.split(' ')[1])
+        elif label.startswith('Ground'):
+            converted_labels.append(f"GPS {label}")
+        elif label.startswith('Active Waypoint'):
+            converted_labels.append(f"Nav {label.split(' ')[-1]}")
+        elif label.endswith('Alt'):
+            converted_labels.append(f"{label}itude")
+        elif label == 'Cross Track Error':
+            converted_labels.append(f"Nav Cross Track Distance")
+        elif label == 'IAS':
+            converted_labels.append(f"Indicated Airspeed")
+        elif label == 'TAS':
+            converted_labels.append(f"True Airspeed")
+        elif label == 'Heading':
+            converted_labels.append(f"Magnetic Heading")
+        elif label == 'HSI Source':
+            converted_labels.append(f"Active Nav Source")
+        elif label == 'Course':
+            converted_labels.append(f"Nav Course")
+        elif label == 'GPS Fix':
+            converted_labels.append(f"GPS Fix Status")
+        else:
+            converted_labels.append(label)
+    return converted_labels
+
+def get_full_labels(input_labels : list[str], input_units : list[str]):
+    # create full labels
+    full_labels = []
+    for (label, unit) in zip(input_labels, input_units):
+        if unit == '':
+            full_labels.append(label)
+        else:
+            full_labels.append(f"{label} ({unit})")
+    return full_labels
+
+def read_in_file(f : Iterable[str], labels : list[str], date_offset : int ) -> list[dict]:
+    file_data = csv.DictReader(f, labels)
+    clean_data = []
+    line = 'START'
+    last_date = 1
+    while line != 'EOF':
+        if line != 'START':
+            new_date = date.fromisoformat(line['Date (yyyy-mm-dd)']).toordinal()
+            line['Date (yyyy-mm-dd)'] = date.fromordinal(new_date + date_offset).isoformat()
+            if new_date - last_date > 2:
+                clean_data = [line]
+            else:
+                clean_data.append(line)
+            last_date = new_date
+        line = next(file_data, 'EOF')
+    return clean_data
+
+def get_example_header() -> dict[str, str]:
+    # Read in the header of the example template
+    f = open('example/log_G3X.csv')
+    example_header = {'file_info': f.readline().strip()}
+    example_header['labels'] = f.readline().strip()
+    example_header['names'] = f.readline().strip()
+    return example_header
+
+def write_data_log(data: list[dict]):
+    csv.register_dialect('garmin_datalog',
+                        lineterminator='\n',
+                        delimiter=",",
+                        quotechar='"',
+                        quoting=csv.QUOTE_MINIMAL
+                        )
+    
+    example = get_example_header()
+    labels = example['labels'].split(',')
+    filename = 'log_'
+    filename += ''.join(data[0]['Date (yyyy-mm-dd)'].split('-'))
+    filename += '_'
+    filename += ''.join(data[0]['Time (hh:mm:ss)'].split(':'))
+
+    duplicate_counter = 0
+    file_path = f'output/{filename}.csv'
+    while isfile(file_path):
+        duplicate_counter += 1
+        file_path = f'output/{filename}_{duplicate_counter}.csv'
+
+    with open(file_path, mode='x') as output:
+        output.write(example['file_info'] + '\n')
+        output.write(example['labels'] + '\n')
+        output.write(example['names'] + '\n')
+        output_writer = csv.DictWriter(output, labels, extrasaction='ignore', dialect='garmin_datalog')
+        output_writer.writerows(data)
+
+    print(f'Wrote file to output : {file_path}')
 
 
-# read line with column units and convert to G3X format
-input_units = []
-for name in [unit.strip() for unit in f.readline().split(',')] :
-    if name == 'enum' or name == '+/-1.0' or name == 'ident':
-        input_units.append('')
-    elif name == 'deg true':
-        input_units.append('deg')
-    elif name == 'kts':
-        input_units.append('kt')
-    elif name == 'fpm':
-        input_units.append('ft/min')
-    else:
-        input_units.append(name)
 
-# read in the data column labels from the input file and replace some to match the G3X formatting.
-input_row_labels = []
-for label in [label.strip() for label in f.readline().split(',')]:
-    if label.startswith('Local'):
-        input_row_labels.append(label.split(' ')[1])
-    elif label.startswith('Ground'):
-        input_row_labels.append(f"GPS {label}")
-    elif label.startswith('Active Waypoint'):
-        input_row_labels.append(f"Nav {label.split(' ')[-1]}")
-    elif label.endswith('Alt'):
-        input_row_labels.append(f"{label}itude")
-    elif label == 'Cross Track Error':
-        input_row_labels.append(f"Nav Cross Track Distance")
-    elif label == 'IAS':
-        input_row_labels.append(f"Indicated Airspeed")
-    elif label == 'TAS':
-        input_row_labels.append(f"True Airspeed")
-    elif label == 'Heading':
-        input_row_labels.append(f"Magnetic Heading")
-    elif label == 'HSI Source':
-        input_row_labels.append(f"Active Nav Source")
-    elif label == 'Course':
-        input_row_labels.append(f"Nav Course")
-    elif label == 'GPS Fix':
-        input_row_labels.append(f"GPS Fix Status")
-    else:
-        input_row_labels.append(label)
+path = 'input/'
+print(listdir(path))
+for input_file in listdir(path):
+    if input_file.endswith('.csv'):
+        with open(f'{path}{input_file}', 'r') as f:
+            input_file_info = f.readline()
+            input_units = get_input_units(f.readline())
+            input_labels = get_input_lables(f.readline())
+            full_labels = get_full_labels(input_labels, input_units)
+            clean_data = read_in_file(f, full_labels, 7168)
 
-# create full labels
-input_labels_full = []
-for (label, unit) in zip(input_row_labels, input_units):
-    if unit == '':
-        input_labels_full.append(label)
-    else:
-        input_labels_full.append(f"{label} ({unit})")
-
-# TODO : clean up jumps in date and time (combine with reading in data rows)
-# If the date jumps by more than 1 day or the time jumps by more than one hour, throw out all of the previous rows
-        
-# TODO offset the date field based on the file name
-# use datetime.fromordinal(date.toordinal() + date_offset)
-# 
-        
-# TODO create input label for GPS time of week and calculate for each row of data log
-# date.isoweekday() % 7 will yield 0 for sunday and 6 for Saturday
-
-# Read in the header of the example template
-f = open('example/log_G3X.csv')
-example_file_info = {key:value for (key, value) in [(field.split('=')[0], shlex.split(field.split('=')[1])[0]) for field in f.readline().split(',')[1:]]}
-example_file_labels = [label.strip() for label in f.readline().split(',')]
-example_file_name = f.readline().strip()
-
-
-print(input_file_info)
-print(input_row_labels)
-print(input_units)
-print(input_labels_full)
-
-
-
-print('example file\n=================\n')
-print(example_file_info)
-
-input_matching = {}
-for label in example_file_labels:
-    input_matching[label] = label in input_labels_full
-
-print(input_matching)
-
-
-print('\ninput file matching\n=================\n')
-input_matching = {}
-for label in input_labels_full:
-    input_matching[label] = label in example_file_labels
-
-for label in input_labels_full:
-    print(f"{label} : {input_matching[label]}")
-
-
-
-
+            write_data_log(clean_data)
 
